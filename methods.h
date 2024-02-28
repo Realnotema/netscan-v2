@@ -2,8 +2,9 @@
 #define METHODS_H
 
 /* <--- Return flags ---> */
-#define OPENED 0
-#define CLOSED 1
+#define SCAN_OPENED 0
+#define SCAN_CLOSED 1
+#define SCAN_PROBLEMS -1
 
 /* <--- Pcap flags ---> */
 #define UDP_FILTER "udp"
@@ -17,6 +18,6 @@
 #define WO_FLAG 0
 #define WITH_FLAG 1
 
-int scanTCP_SYN(const char *destip, const int destport);
+int scanTCP_SYN(const char *ip, const int port);
 
 #endif
