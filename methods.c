@@ -31,6 +31,10 @@ int scanTCP_SYN(const char *ip, const int port) {
     u_int size_ip;
     const u_char *packet;
 
+    /* Creating a filter */
+    char * filter = (char *) malloc(14 * sizeof(char));
+    sprintf(filter, "%s %d", TCP_FILTER, port);
+
     /* <--- Sending packet --->*/
     if (pcap_findalldevs(&device, errbuf_pcap) != 0) {
         fprintf(stderr, "No device: %s\n", errbuf_pcap);
@@ -51,7 +55,7 @@ int scanTCP_SYN(const char *ip, const int port) {
     }
     fprintf(stderr, "=> IP is ready...\n");
     tcp_tag = libnet_build_tcp(
-        1234,
+        generate_random_port(),
         port,
         0,
         0,
@@ -93,7 +97,7 @@ int scanTCP_SYN(const char *ip, const int port) {
         fprintf(stderr, "Can't get netmask for %s: %s\n", device->name, errbuf_pcap);
         return SCAN_PROBLEMS;
     }
-    if (pcap_compile(handle, &fp, TCP_FILTER, 0, net) == -1) {
+    if (pcap_compile(handle, &fp, filter, 0, net) == -1) {
         fprintf(stderr, "Can't compile filter: %s\n", errbuf_pcap);
         return SCAN_PROBLEMS;
     }
@@ -103,8 +107,7 @@ int scanTCP_SYN(const char *ip, const int port) {
     }
     packet = pcap_next(handle, &header);
     if (packet == 0) {
-        fprintf(stderr, "Timeout. Port may be closed or filtered: %s\n", errbuf_pcap);
-        return SCAN_PROBLEMS;
+        return SCAN_FILTERED_CLOSED;
     }
     struct tcphdr *tcp_header;
     int tcp_header_length;
