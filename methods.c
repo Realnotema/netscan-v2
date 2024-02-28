@@ -6,31 +6,14 @@
 #include <netinet/tcp.h>
 #include <netinet/ip.h>
 #include <netinet/if_ether.h>
+#include "methods.h"
 
-/* <--- Pcap flags --->*/
-#define UDP_FILTER "udp"
-#define TCP_FILTER "port 2202"
-#define BUFSIZE_RECV 1024
-#define ETHERNET_SIZE 14
+int generate_random_port() {
+    return rand() % 65535 + 1025;
+}
 
-/* <--- Tehnique flags --->*/
-#define CONNECT_TEHNIQUE 1
-#define HALF_CONNECT_TECHNIQUE 2
-#define DATAGRAMM_TECHNIQUE 3
-
-/* <--- Selection flags --->*/
-#define WO_PORT 0
-#define WITH_PORT 1
-#define WO_FLAG 0
-#define WITH_FLAG 1
-
-typedef struct Target {
-    char *ip;
-    char *port;
-    int technique;
-} Target;
-
-int main(int argc, char *argv[]) {
+/* <--- Sending and sniffing TCP SYN packet --->*/
+int scanTCP_SYN(const char *destip, const int destport) {
     /* <--- Libnet variables --->*/
     char errbuf_net[LIBNET_ERRBUF_SIZE];
     libnet_ptag_t tcp_tag, ip_tag;
@@ -52,10 +35,10 @@ int main(int argc, char *argv[]) {
     pcap_findalldevs(&device, errbuf_pcap);
     libnet_t *lc = libnet_init(LIBNET_RAW4, device->name, errbuf_net);
     tcp_tag = ip_tag = LIBNET_PTAG_INITIALIZER;
-    ip_addr = libnet_name2addr4(lc, "85.143.113.117", LIBNET_DONT_RESOLVE);
+    ip_addr = libnet_name2addr4(lc, destip, LIBNET_DONT_RESOLVE);
     tcp_tag = libnet_build_tcp(
         1234,
-        2202,
+        destport,
         0,
         0,
         TH_SYN,
@@ -91,14 +74,12 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     packet = pcap_next(handle, &header);
-    struct tcphdr *tcp_header;
-    int tcp_header_length;
     struct ether_header *eth_header = (struct ether_header *)packet;
     struct ip *ip_header = (struct ip *)(packet + sizeof(struct ether_header));
-    tcp_header = (struct tcphdr *)(packet + sizeof(struct ether_header) + (ip_header->ip_hl << 2));
-    tcp_header_length = tcp_header->th_off;
+    struct tcphdr *tcp_header = (struct tcphdr *)(packet + sizeof(struct ether_header) + (ip_header->ip_hl));
+    int tcp_header_length = tcp_header->th_off;
     if ((tcp_header->th_flags & TH_SYN) && (tcp_header->th_flags & TH_ACK)) {
-        printf("opened\n");
-    } else printf("closed\n");
-    return 0;
+        printf("open\n");
+        return OPENED;
+    } else return CLOSED;
 }
