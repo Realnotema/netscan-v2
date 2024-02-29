@@ -12,20 +12,38 @@ int generate_random_port() {
     return rand() % 65535 + 1025;
 }
 
+int generate_session(Init *session, const char *ip) {
+    char errbuf_pcap[PCAP_ERRBUF_SIZE];
+    char errbuf_net[LIBNET_ERRBUF_SIZE];
+    if (pcap_findalldevs(&session->device, errbuf_pcap) != 0) {
+        fprintf(stderr, "=> No device: %s\n", errbuf_pcap);
+        return SCAN_PROBLEMS;
+    }
+    session->lc = libnet_init(LIBNET_RAW4, session->device->name, errbuf_net);
+    if (session->lc == NULL) {
+        fprintf(stderr, "=> Can't initialise libnet: %s\n", errbuf_net);
+        return SCAN_PROBLEMS;
+    }
+    session->tcp_tag = session->ip_tag = LIBNET_PTAG_INITIALIZER;
+    session->ip_addr = libnet_name2addr4(session->lc, ip, LIBNET_DONT_RESOLVE);
+    if (session->ip_addr == -1) {
+        fprintf(stderr, "=> Problems with func name2addr4: %s\n", errbuf_net);
+        return SCAN_PROBLEMS;
+    }
+    return SCAN_NEXT;
+}
+
 /* <--- Sending and sniffing TCP SYN packet --->*/
 int scanTCP_SYN(const char *ip, const int port) {
-    /* <--- Libnet variables --->*/
+    /* <--- Error bufers --->*/
+    char errbuf_pcap[PCAP_ERRBUF_SIZE];
     char errbuf_net[LIBNET_ERRBUF_SIZE];
-    libnet_ptag_t tcp_tag, ip_tag;
-    u_int32_t ip_addr;
 
     /* <--- Pcap variables --->*/
-    pcap_if_t *device;
     pcap_t *handle;
     bpf_u_int32 net = 0, mask = 0;
     struct bpf_program fp;
     struct pcap_pkthdr header;
-    char errbuf_pcap[PCAP_ERRBUF_SIZE];
     struct tcphdr *tcp;
     struct ip *iphdr;
     u_int size_ip;
@@ -35,26 +53,13 @@ int scanTCP_SYN(const char *ip, const int port) {
     char * filter = (char *) malloc(14 * sizeof(char));
     sprintf(filter, "%s %d", TCP_FILTER, port);
 
+    Init session;
+    if (generate_session(&session, ip) == SCAN_PROBLEMS) {
+        return SCAN_PROBLEMS;
+    }
+
     /* <--- Sending packet --->*/
-    if (pcap_findalldevs(&device, errbuf_pcap) != 0) {
-        fprintf(stderr, "No device: %s\n", errbuf_pcap);
-        return SCAN_PROBLEMS;
-    }
-    fprintf(stderr, "=> Using %s device\n", device->name);
-    libnet_t *lc = libnet_init(LIBNET_RAW4, device->name, errbuf_net);
-    if (lc == NULL) {
-        fprintf(stderr, "Can't initialise libnet: %s\n", errbuf_net);
-        return SCAN_PROBLEMS;
-    }
-    fprintf(stderr, "=> Libnet initialisation...\n");
-    tcp_tag = ip_tag = LIBNET_PTAG_INITIALIZER;
-    ip_addr = libnet_name2addr4(lc, ip, LIBNET_DONT_RESOLVE);
-    if (ip_addr == -1) {
-        fprintf(stderr, "Problems with func name2addr4: %s\n", errbuf_net);
-        return SCAN_PROBLEMS;
-    }
-    fprintf(stderr, "=> IP is ready...\n");
-    tcp_tag = libnet_build_tcp(
+    session.tcp_tag = libnet_build_tcp(
         generate_random_port(),
         port,
         0,
@@ -66,35 +71,32 @@ int scanTCP_SYN(const char *ip, const int port) {
         0,
         NULL,
         0,
-        lc,
-        tcp_tag
+        session.lc,
+        session.tcp_tag
     );
-    if (tcp_tag == -1) {
+    if (session.tcp_tag == -1) {
         fprintf(stderr, "=> TCP tag building problem: %s\n", errbuf_net);
         return SCAN_PROBLEMS;
     }
-    fprintf(stderr, "=> TCP segment is ready\n");
-    if (libnet_autobuild_ipv4(LIBNET_IPV4_H + LIBNET_TCP_H, IPPROTO_TCP, ip_addr, lc) == -1) {
+    if (libnet_autobuild_ipv4(LIBNET_IPV4_H + LIBNET_TCP_H, IPPROTO_TCP, session.ip_addr, session.lc) == -1) {
         fprintf(stderr, "=> IPv4 build problem: %s\n", errbuf_net);
         return SCAN_PROBLEMS;
     }
-    fprintf(stderr, "=> IPv4 builded\n");
-    int bytes_written = libnet_write(lc);
+    int bytes_written = libnet_write(session.lc);
     if (bytes_written == -1) {
         fprintf(stderr, "=> Send problem: %s\n", errbuf_net);
         return SCAN_PROBLEMS;
     }
-    fprintf(stderr, "=> Packet sended!\nWaiting for answer...\n");
-    libnet_destroy(lc);
+    libnet_destroy(session.lc);
 
     /* <--- Sniffing packet --->*/
-    handle = pcap_open_live(device->name, BUFSIZE_RECV, 1, 1000, errbuf_pcap);
+    handle = pcap_open_live(session.device->name, BUFSIZE_RECV, 1, 1000, errbuf_pcap);
     if (handle == NULL) {
-        fprintf(stderr, "Could not open device %s: %s\n", device->name, errbuf_pcap);
+        fprintf(stderr, "Could not open device %s: %s\n", session.device->name, errbuf_pcap);
         return SCAN_PROBLEMS;
     }
-    if (pcap_lookupnet(device->name, &net, &mask, errbuf_pcap) == -1) {
-        fprintf(stderr, "Can't get netmask for %s: %s\n", device->name, errbuf_pcap);
+    if (pcap_lookupnet(session.device->name, &net, &mask, errbuf_pcap) == -1) {
+        fprintf(stderr, "Can't get netmask for %s: %s\n", session.device->name, errbuf_pcap);
         return SCAN_PROBLEMS;
     }
     if (pcap_compile(handle, &fp, filter, 0, net) == -1) {
@@ -117,5 +119,7 @@ int scanTCP_SYN(const char *ip, const int port) {
     tcp_header_length = tcp_header->th_off;
     if ((tcp_header->th_flags & TH_SYN) && (tcp_header->th_flags & TH_ACK)) {
         return SCAN_OPENED;
-    } else return SCAN_CLOSED;
+    } else {
+        return SCAN_CLOSED;
+    }
 }

@@ -8,7 +8,11 @@
 #define DATAGRAMM_TECHNIQUE 3
 
 int main(int argc, char *argv[]) {
-    if (scanTCP_SYN("85.143.113.117", 2202) == SCAN_OPENED) {
-        printf("opened\n");
-    } else printf("closed\n");
+    clock_t time_start= clock(); 
+    if (scanTCP_SYN("45.33.32.156", 135) == SCAN_OPENED) {
+        printf("%d/tcp\topen\n", 22);
+    }
+    clock_t time_end = clock() - time_start;
+    printf("Time: %f sec.\n", (double)time_end / CLOCKS_PER_SEC);
+    return 0;
 }
