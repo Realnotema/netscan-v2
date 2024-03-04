@@ -2,12 +2,25 @@
 #include <stdlib.h>
 #include <time.h>
 #include "methods.h"
+#include "events.h"
 
 void event_handler(char *ip, int port, int technique) {
-    clock_t time_start= clock(); 
-    if (scanTCP_SYN(ip, port) == SCAN_OPENED) {
-        printf("%d/tcp\topen\n", port);
-    } else printf("%d/tcp\tclosed\n", port);
-    clock_t time_end = clock() - time_start;
-    printf("Time: %.2f ms\n", (double)time_end / CLOCKS_PER_SEC * 1000);
+    if (port != 0) {
+        switch (technique){
+            case HALF_CONNECT_TECHNIQUE:
+                fprintf(stdout, "Trying scanning host %s\n\nPORT\tPROTO\tSTATUS\n", ip);
+                clock_t time_start= clock(); 
+                switch (scanTCP_SYN(ip, port)) {
+                    case SCAN_CLOSED:
+                        fprintf(stdout, "%d\tTCP\tclosed\n\n", port);
+                        break;
+                    case SCAN_OPENED:
+                        fprintf(stdout, "%d\tTCP\topened\n\n", port);
+                        break;
+                }
+                clock_t time_end = clock() - time_start;
+                printf("Time left: %.2f sec.\n", (double)time_end / CLOCKS_PER_SEC * 100);
+                break;
+        }
+    }
 }

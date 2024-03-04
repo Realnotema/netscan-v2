@@ -64,7 +64,7 @@ struct tcphdr *sniff_tcp(Init *session, int port) {
     }
     packet = pcap_next(handle, &header);
     if (packet == 0) {
-        fprintf(stderr, "Port may be filtered: %s\n", errbuf_pcap);
+        // May be filtered!
         return NULL;
     }
     struct ether_header *eth_header = (struct ether_header *)packet;
@@ -89,7 +89,6 @@ int scanTCP_SYN(const char *ip, const int port) {
     if (generate_session(&session, ip) == SCAN_PROBLEMS) {
         return SCAN_PROBLEMS;
     }
-
     /* <--- Sending packet --->*/
     session.tcp_tag = libnet_build_tcp(
         generate_random_port(),
@@ -122,7 +121,7 @@ int scanTCP_SYN(const char *ip, const int port) {
     libnet_destroy(session.lc);
     struct tcphdr *tcp_header = sniff_tcp(&session, port);
     if (tcp_header == NULL) {
-        return SCAN_FILTERED_CLOSED;
+        return SCAN_CLOSED;
     }
     if ((tcp_header->th_flags & TH_SYN) && (tcp_header->th_flags & TH_ACK)) {
         return SCAN_OPENED;
