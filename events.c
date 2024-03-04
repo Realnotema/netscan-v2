@@ -22,5 +22,5 @@ void event_handler(char *ip, int port, int technique) {
                 printf("Time left: %.2f sec.\n", (double)time_end / CLOCKS_PER_SEC * 100);
                 break;
         }
-    }
+    } 
 }
